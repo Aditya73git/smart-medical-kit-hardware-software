@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="google-site-verification" content="GtB9lGKZLV82W4B9mA4zkQUwkmToqFRgWtZ7FWdx7v8" />
+  <title>Smart Medical Box - Live Telemetry & Patient Adherence Dashboard</title>
+  
+  <!-- Modern Clean Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <style>
+    /* Soothing Clean Light Slate Background (NOT black/dark) */
+    body {
+      background-color: #f1f5f9;
+      background-image: 
+        radial-gradient(circle at 50% 0%, rgba(20, 184, 166, 0.07) 0%, transparent 45%),
+        radial-gradient(circle at 10% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 30%, rgba(16, 185, 129, 0.05) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.55; transform: scale(1.08); }
+    }
+    .led-glow-green { 
+      box-shadow: 0 0 16px #10b981, inset 0 0 8px #a7f3d0; 
+      animation: pulse-glow 0.8s infinite; 
+    }
+    .led-glow-amber { 
+      box-shadow: 0 0 16px #f59e0b, inset 0 0 8px #fde68a; 
+      animation: pulse-glow 0.8s infinite; 
+    }
+    .led-glow-red { 
+      box-shadow: 0 0 16px #ef4444, inset 0 0 8px #fecaca; 
+      animation: pulse-glow 0.8s infinite; 
+    }
+    .buzzer-buzz { animation: pulse-glow 0.35s infinite; }
+
+    /* Outer Glowing Cards (Clean, easily visible, soft radiant glow) */
+    .card-glow {
+      background: #ffffff;
+      border: 1px solid rgba(226, 232, 240, 0.95);
+      box-shadow: 0 2px 12px -2px rgba(15, 23, 42, 0.04), 0 0 14px -2px rgba(20, 184, 166, 0.07);
+      transition: all 0.25s ease;
+    }
+    .card-glow:hover {
+      border-color: rgba(20, 184, 166, 0.45);
+      box-shadow: 0 6px 20px -2px rgba(15, 23, 42, 0.07), 0 0 20px rgba(20, 184, 166, 0.16);
+    }
+
+    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+  </style>
+</head>
+<body class="text-slate-800 min-h-screen font-sans antialiased selection:bg-teal-500 selection:text-white">
+
+  <!-- TOP NAVIGATION / HEADER (Single-Line Header, Non-Sticky, Seamlessly Blends with Upper Area) -->
+  <header class="border-b border-slate-200/80 bg-white/90 backdrop-blur-md px-4 sm:px-8 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.03)]">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      
+      <!-- Brand Logo & Title -->
+      <div class="flex items-center space-x-2.5">
+        <div class="w-8 h-8 rounded-xl bg-gradient-to-tr from-teal-500 to-emerald-400 flex items-center justify-center text-white shadow-sm shadow-teal-500/20">
+          <i class="fa-solid fa-pills text-sm"></i>
+        </div>
+        <h1 class="text-base sm:text-lg font-bold tracking-tight text-slate-900 flex items-center gap-2">
+          <span>Smart Medical Box</span>
+          <span class="text-teal-700 bg-teal-50 border border-teal-200 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+            ESP32 IoT
+          </span>
+        </h1>
+      </div>
+
+      <!-- Right Side Status: Live SSE + Real-Time Clock -->
+      <div class="flex items-center space-x-2.5 sm:space-x-3">
+        <!-- Live SSE Stream Pill -->
+        <div class="bg-white border border-slate-200 px-2.5 py-1 rounded-full flex items-center space-x-1.5 text-xs text-slate-600 shadow-2xs">
+          <span id="sse-indicator" class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span id="sse-text" class="font-medium text-[11px] hidden sm:inline">Live SSE Stream</span>
+        </div>
+
+        <!-- 12-Hour AM/PM Real-Time Clock -->
+        <div class="bg-teal-50/70 border border-teal-200/80 px-3 py-1 rounded-full flex items-center space-x-2 text-xs shadow-2xs">
+          <i class="fa-regular fa-clock text-teal-600 text-xs"></i>
+          <span id="live-clock" class="font-mono font-bold text-teal-800 text-xs sm:text-sm">00:00:00</span>
+          <span class="text-slate-300 hidden sm:inline">•</span>
+          <span id="live-date" class="text-slate-500 font-medium text-[11px] hidden sm:inline">Syncing...</span>
+        </div>
+
+        <!-- USB Hardware Connection (Web Serial API for Data Transfer Cable) -->
+        <button id="btn-usb-connect" class="px-2.5 py-1 bg-white hover:bg-teal-50 text-slate-700 hover:text-teal-700 border border-slate-200 hover:border-teal-300 rounded-full text-xs font-semibold flex items-center space-x-1.5 transition shadow-2xs cursor-pointer" title="Attach USB cable to ESP32 and click to link hardware directly!">
+          <span id="usb-indicator" class="w-2 h-2 rounded-full bg-slate-400"></span>
+          <i class="fa-brands fa-usb text-[11px] text-teal-600"></i>
+          <span id="usb-status-text" class="text-[11px]">Connect USB</span>
+        </button>
+
+        <!-- Hidden Audio Alert Toggle (Retained for JS event listener compatibility) -->
+        <button id="sound-toggle" class="hidden" aria-hidden="true" title="Audio Alert">
+          <i class="fa-solid fa-volume-high" id="sound-icon"></i>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-6xl mx-auto px-4 py-6 space-y-6">
+
+    <!-- URGENT POPUP BANNER (Shows when alarm or alert fires) -->
+    <div id="alarm-banner" class="hidden rounded-2xl p-4 border border-rose-300 bg-rose-50 transition-all duration-300 shadow-md flex items-center justify-between text-slate-800">
+      <div class="flex items-center space-x-3.5">
+        <div id="alarm-banner-icon" class="w-11 h-11 rounded-xl bg-rose-100 border border-rose-300 text-rose-600 flex items-center justify-center text-xl font-bold animate-bounce shadow-2xs">
+          <i class="fa-solid fa-bell"></i>
+        </div>
+        <div>
+          <h2 id="alarm-banner-title" class="text-base font-bold text-rose-900">MEDICINE TIME!</h2>
+          <p id="alarm-banner-desc" class="text-xs text-rose-700">Patient needs to take medicine and press the button within 10 seconds.</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-3">
+        <div id="alarm-timer-box" class="text-right font-mono pr-4 border-r border-slate-300 hidden">
+          <div class="text-[10px] text-slate-500 uppercase font-semibold">Timeout In</div>
+          <div id="alarm-countdown" class="text-2xl font-bold text-amber-600">10.0s</div>
+        </div>
+        <button id="btn-patient-take" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 font-semibold text-white text-xs rounded-xl shadow-sm transition flex items-center space-x-2">
+          <i class="fa-solid fa-hand-pointer"></i>
+          <span>Press Button (Taken)</span>
+        </button>
+        <button id="btn-banner-override" class="hidden px-4 py-2.5 bg-teal-600 hover:bg-teal-700 font-semibold text-white text-xs rounded-xl shadow-sm transition items-center space-x-2">
+          <i class="fa-solid fa-arrows-rotate"></i>
+          <span id="banner-override-text">Change to TAKEN</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- STATS ROW (4 Minimized Compact Metric Cards with Soft Outer Glow) -->
+    <section class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      
+      <!-- Card 1: Total Reminders -->
+      <div class="card-glow rounded-xl p-3 flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-lg bg-blue-50 border border-blue-100 text-blue-600 flex items-center justify-center text-sm shrink-0">
+          <i class="fa-solid fa-calendar-check"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">Total Reminders</div>
+          <div id="stat-total" class="text-xl font-extrabold text-slate-900 leading-tight">0</div>
+        </div>
+      </div>
+
+      <!-- Card 2: Medicine Taken -->
+      <div class="card-glow rounded-xl p-3 flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center text-sm shrink-0">
+          <i class="fa-solid fa-circle-check"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">Medicine Taken</div>
+          <div id="stat-taken" class="text-xl font-extrabold text-emerald-600 leading-tight">0</div>
+        </div>
+      </div>
+
+      <!-- Card 3: Medicine Missed -->
+      <div class="card-glow rounded-xl p-3 flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-lg bg-rose-50 border border-rose-100 text-rose-600 flex items-center justify-center text-sm shrink-0">
+          <i class="fa-solid fa-circle-xmark"></i>
+        </div>
+        <div class="min-w-0">
+          <div class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">Medicine Missed</div>
+          <div id="stat-missed" class="text-xl font-extrabold text-rose-600 leading-tight">0</div>
+        </div>
+      </div>
+
+      <!-- Card 4: Adherence Rate (Clickable to open 3D circular diagram) -->
+      <div id="card-adherence-btn" class="card-glow rounded-xl p-3 cursor-pointer group flex items-center space-x-3">
+        <div class="w-9 h-9 rounded-lg bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center text-sm shrink-0 group-hover:scale-105 transition-transform">
+          <i class="fa-solid fa-chart-pie"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center space-x-1.5">
+            <span class="text-[11px] font-semibold text-slate-500 uppercase tracking-wider truncate">Adherence</span>
+            <span class="text-[9px] px-1.5 py-0.2 rounded bg-teal-50 text-teal-700 border border-teal-200 font-mono font-bold">3D</span>
+          </div>
+          <div id="stat-adherence" class="text-xl font-extrabold text-teal-700 leading-tight">100%</div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- CENTER SECTION: HARDWARE TWIN + ACTIVE SCHEDULE & TEST BENCH -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- LEFT: PHYSICAL HARDWARE DIGITAL TWIN (Clean, no pictures) -->
+      <div class="lg:col-span-7 card-glow rounded-2xl p-6 space-y-6">
+        
+        <div class="flex items-center justify-between border-b border-slate-100 pb-3.5">
+          <div class="flex items-center space-x-2.5">
+            <span class="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
+            <h2 class="font-bold text-sm tracking-wide text-slate-800 uppercase">Hardware Digital Twin</h2>
+          </div>
+          <div class="flex items-center space-x-2">
+            <!-- Hardware link badge -->
+            <span id="hardware-link-badge" class="px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 font-mono font-semibold text-[10px] flex items-center gap-1.5 shadow-2xs">
+              <span id="hardware-link-dot" class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+              <span id="hardware-link-text">USB: Ready</span>
+            </span>
+            <span class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold text-[10px]">ONLINE</span>
+          </div>
+        </div>
+
+        <!-- Direct USB Cable Hardware Link Banner -->
+        <div id="usb-banner" class="p-3 bg-teal-50/70 border border-teal-200/80 rounded-xl flex items-center justify-between text-xs transition shadow-2xs">
+          <div class="flex items-center space-x-2.5">
+            <div class="w-7 h-7 rounded-lg bg-teal-100 text-teal-700 flex items-center justify-center text-xs shrink-0">
+              <i class="fa-solid fa-bolt"></i>
+            </div>
+            <div>
+              <span class="font-bold text-teal-900 block" id="usb-banner-title">Direct USB Data Cable Link</span>
+              <span class="text-[11px] text-slate-600" id="usb-banner-desc">Attach USB data cable to ESP32 to control LEDs & buzzer directly from this website.</span>
+            </div>
+          </div>
+          <button id="btn-usb-connect-twin" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white rounded-lg text-xs font-semibold shadow-2xs transition shrink-0 flex items-center space-x-1.5 cursor-pointer">
+            <i class="fa-brands fa-usb text-[11px]"></i>
+            <span id="btn-usb-twin-text">Link Cable</span>
+          </button>
+        </div>
+
+        <!-- 3 LIGHTS (LEDS) DISPLAY -->
+        <div>
+          <div class="flex items-center justify-between mb-3">
+            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">3 Scheduled Indicator LEDs</span>
+            <span class="text-[11px] text-slate-400">Different light flashes for each dose time</span>
+          </div>
+
+          <div class="grid grid-cols-3 gap-3.5">
+            
+            <!-- LED 1: Morning -->
+            <div id="card-led-1" class="bg-emerald-50/30 border border-emerald-100/80 rounded-2xl p-3.5 text-center transition-all hover:shadow-xs">
+              <div class="flex justify-center mb-2.5">
+                <div id="led-morning" class="w-8 h-8 rounded-full bg-slate-200 border-2 border-slate-300 transition-all duration-200 shadow-inner"></div>
+              </div>
+              <div class="text-xs font-bold text-emerald-700">LIGHT 1 (Morning)</div>
+              <div id="led-time-1" class="text-[11px] text-slate-600 font-mono font-semibold mt-1">GPIO 19 • 08:00 AM</div>
+              <div id="led-status-1" class="text-[10px] mt-2 px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-600 inline-block font-medium">OFF</div>
+            </div>
+
+            <!-- LED 2: Afternoon -->
+            <div id="card-led-2" class="bg-amber-50/30 border border-amber-100/80 rounded-2xl p-3.5 text-center transition-all hover:shadow-xs">
+              <div class="flex justify-center mb-2.5">
+                <div id="led-afternoon" class="w-8 h-8 rounded-full bg-slate-200 border-2 border-slate-300 transition-all duration-200 shadow-inner"></div>
+              </div>
+              <div class="text-xs font-bold text-amber-700">LIGHT 2 (Afternoon)</div>
+              <div id="led-time-2" class="text-[11px] text-slate-600 font-mono font-semibold mt-1">GPIO 18 • 01:30 PM</div>
+              <div id="led-status-2" class="text-[10px] mt-2 px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-600 inline-block font-medium">OFF</div>
+            </div>
+
+            <!-- LED 3: Night -->
+            <div id="card-led-3" class="bg-rose-50/30 border border-rose-100/80 rounded-2xl p-3.5 text-center transition-all hover:shadow-xs">
+              <div class="flex justify-center mb-2.5">
+                <div id="led-night" class="w-8 h-8 rounded-full bg-slate-200 border-2 border-slate-300 transition-all duration-200 shadow-inner"></div>
+              </div>
+              <div class="text-xs font-bold text-rose-700">LIGHT 3 (Night)</div>
+              <div id="led-time-3" class="text-[11px] text-slate-600 font-mono font-semibold mt-1">GPIO 5 • 08:00 PM</div>
+              <div id="led-status-3" class="text-[10px] mt-2 px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-600 inline-block font-medium">OFF</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- BUZZER & PHYSICAL PATIENT CONFIRMATION BUTTON -->
+        <div class="bg-slate-50/70 border border-slate-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <!-- Buzzer Status -->
+          <div class="flex items-center space-x-3 w-full sm:w-auto">
+            <div class="w-10 h-10 rounded-xl bg-white border border-slate-200/80 flex items-center justify-center text-teal-600 shadow-2xs shrink-0">
+              <i class="fa-solid fa-bullhorn text-sm"></i>
+            </div>
+            <div>
+              <div class="text-xs font-bold text-slate-700">Active Buzzer (GPIO 23)</div>
+              <div id="buzzer-badge" class="flex items-center space-x-1.5 text-xs text-slate-400 font-medium mt-0.5">
+                <i class="fa-solid fa-volume-xmark" id="buzzer-icon"></i>
+                <span id="buzzer-state-text">Silent</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Patient Confirmation Button Push -->
+          <div class="w-full sm:w-auto">
+            <button id="hardware-btn-press" class="w-full sm:w-auto px-5 py-2.5 bg-teal-600 hover:bg-teal-700 active:bg-teal-800 text-white text-xs font-semibold rounded-xl transition shadow-xs flex items-center justify-center space-x-2">
+              <i class="fa-solid fa-hand-pointer"></i>
+              <span>Push Medicine Taken Button (GPIO 4)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Hidden OLED Elements (Retained for JS and SSE background synchronization) -->
+        <div class="hidden" aria-hidden="true">
+          <span id="oled-line1">SMART MEDIBOX</span>
+          <span id="oled-clock">12:00:00</span>
+          <div id="oled-line2">--:--:--</div>
+          <div id="oled-line3">Status: Monitoring</div>
+        </div>
+
+      </div>
+
+      <!-- RIGHT: ACTIVE SCHEDULE OVERVIEW & DOSE TEST SIMULATION -->
+      <div class="lg:col-span-5 card-glow rounded-2xl p-6 space-y-5 flex flex-col justify-between">
+        
+        <div>
+          <!-- Header: Active Schedule Overview -->
+          <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+            <div class="flex items-center space-x-2">
+              <div class="w-7 h-7 rounded-xl bg-teal-50 border border-teal-200 text-teal-600 flex items-center justify-center text-xs">
+                <i class="fa-solid fa-calendar-days"></i>
+              </div>
+              <h2 class="font-bold text-sm tracking-wide text-slate-800 uppercase">Active Schedule</h2>
+            </div>
+            
+            <!-- Button to open the sliding drawer -->
+            <button id="btn-open-schedule-drawer-card" class="px-3 py-1 bg-slate-50 hover:bg-teal-50 text-teal-700 hover:text-teal-800 rounded-full border border-slate-200 hover:border-teal-300 text-xs font-semibold transition flex items-center space-x-1.5 shadow-2xs">
+              <i class="fa-solid fa-pen-to-square text-[11px]"></i>
+              <span>Edit Times</span>
+            </button>
+          </div>
+
+          <!-- Schedule Summary Pills -->
+          <div class="grid grid-cols-3 gap-2.5 mb-5">
+            <div class="p-3 bg-emerald-50/40 border border-emerald-100 rounded-2xl text-center">
+              <span class="text-[10px] font-bold text-emerald-800 uppercase tracking-wide block mb-0.5">Morning</span>
+              <span id="summary-time-1" class="text-xs font-mono font-bold text-emerald-700">08:00 AM</span>
+            </div>
+            <div class="p-3 bg-amber-50/40 border border-amber-100 rounded-2xl text-center">
+              <span class="text-[10px] font-bold text-amber-800 uppercase tracking-wide block mb-0.5">Afternoon</span>
+              <span id="summary-time-2" class="text-xs font-mono font-bold text-amber-700">01:30 PM</span>
+            </div>
+            <div class="p-3 bg-rose-50/40 border border-rose-100 rounded-2xl text-center">
+              <span class="text-[10px] font-bold text-rose-800 uppercase tracking-wide block mb-0.5">Night</span>
+              <span id="summary-time-3" class="text-xs font-mono font-bold text-rose-700">08:00 PM</span>
+            </div>
+          </div>
+
+          <!-- Simulation Triggers Section -->
+          <div class="flex items-center justify-between mb-2.5">
+            <span class="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center space-x-1.5">
+              <i class="fa-solid fa-flask text-teal-600"></i>
+              <span>Quick Test Triggers</span>
+            </span>
+            <span class="text-[11px] text-slate-400 font-medium">Test 5s alarm flow</span>
+          </div>
+
+          <!-- Dose Simulation Trigger Buttons -->
+          <div class="space-y-2.5">
+            <button id="sim-dose-1" class="w-full p-3.5 bg-slate-50/70 hover:bg-emerald-50 border border-slate-200/80 hover:border-emerald-300 text-left rounded-2xl transition flex items-center justify-between group shadow-2xs">
+              <div class="flex items-center space-x-3">
+                <span class="w-8 h-8 rounded-xl bg-emerald-100/70 text-emerald-700 flex items-center justify-center text-xs font-bold">1</span>
+                <div>
+                  <div class="text-xs font-bold text-slate-800 group-hover:text-emerald-700">Simulate Morning Dose</div>
+                  <div class="text-[11px] text-slate-500 font-medium">Scheduled: <span id="sim-time-1" class="text-emerald-700 font-mono font-bold">08:00 AM</span> • Green LED + Buzzer</div>
+                </div>
+              </div>
+              <div class="w-7 h-7 rounded-full bg-white border border-slate-200 group-hover:border-emerald-400 group-hover:bg-emerald-600 flex items-center justify-center transition">
+                <i class="fa-solid fa-play text-slate-400 group-hover:text-white text-[10px]"></i>
+              </div>
+            </button>
+
+            <button id="sim-dose-2" class="w-full p-3.5 bg-slate-50/70 hover:bg-amber-50 border border-slate-200/80 hover:border-amber-300 text-left rounded-2xl transition flex items-center justify-between group shadow-2xs">
+              <div class="flex items-center space-x-3">
+                <span class="w-8 h-8 rounded-xl bg-amber-100/70 text-amber-700 flex items-center justify-center text-xs font-bold">2</span>
+                <div>
+                  <div class="text-xs font-bold text-slate-800 group-hover:text-amber-700">Simulate Afternoon Dose</div>
+                  <div class="text-[11px] text-slate-500 font-medium">Scheduled: <span id="sim-time-2" class="text-amber-700 font-mono font-bold">01:30 PM</span> • Yellow LED + Buzzer</div>
+                </div>
+              </div>
+              <div class="w-7 h-7 rounded-full bg-white border border-slate-200 group-hover:border-amber-400 group-hover:bg-amber-600 flex items-center justify-center transition">
+                <i class="fa-solid fa-play text-slate-400 group-hover:text-white text-[10px]"></i>
+              </div>
+            </button>
+
+            <button id="sim-dose-3" class="w-full p-3.5 bg-slate-50/70 hover:bg-rose-50 border border-slate-200/80 hover:border-rose-300 text-left rounded-2xl transition flex items-center justify-between group shadow-2xs">
+              <div class="flex items-center space-x-3">
+                <span class="w-8 h-8 rounded-xl bg-rose-100/70 text-rose-700 flex items-center justify-center text-xs font-bold">3</span>
+                <div>
+                  <div class="text-xs font-bold text-slate-800 group-hover:text-rose-700">Simulate Night Dose</div>
+                  <div class="text-[11px] text-slate-500 font-medium">Scheduled: <span id="sim-time-3" class="text-rose-700 font-mono font-bold">08:00 PM</span> • Red LED + Buzzer</div>
+                </div>
+              </div>
+              <div class="w-7 h-7 rounded-full bg-white border border-slate-200 group-hover:border-rose-400 group-hover:bg-rose-600 flex items-center justify-center transition">
+                <i class="fa-solid fa-play text-slate-400 group-hover:text-white text-[10px]"></i>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Safe compatibility elements (hidden from view) -->
+        <span id="endpoint-url" class="hidden"></span>
+        <button id="copy-endpoint-btn" class="hidden"></button>
+
+      </div>
+
+    </div>
+
+    <!-- 3D CIRCULAR ADHERENCE SECTION -->
+    <section id="adherence-3d-section" class="card-glow rounded-2xl p-6 space-y-6">
+      
+      <!-- Section Header -->
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-8 h-8 rounded-xl bg-teal-50 border border-teal-200 text-teal-600 flex items-center justify-center text-sm">
+            <i class="fa-solid fa-chart-pie"></i>
+          </div>
+          <div>
+            <h2 class="font-bold text-sm tracking-wide text-slate-900 uppercase">3D Circular Adherence Analysis</h2>
+            <p class="text-xs text-slate-500">Hover over any 3D circular slice to view Taken, Missed, and Manually Changed statistics</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2 text-xs">
+          <span class="text-slate-500">Model:</span>
+          <span class="px-2.5 py-0.5 rounded-full bg-teal-50 border border-teal-200 text-teal-700 font-mono font-bold text-[10px]">
+            SVG-3D Extrusion
+          </span>
+        </div>
+      </div>
+
+      <!-- Main 3D Stage + Stats Breakdown Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        
+        <!-- Left 7 Cols: The 3D Interactive Donut Stage -->
+        <div class="lg:col-span-7 flex flex-col items-center justify-center relative py-6">
+          
+          <!-- Floating Interactive Hover Tooltip Box -->
+          <div id="chart-3d-tooltip" class="absolute z-20 pointer-events-none opacity-0 transition-opacity duration-200 bg-white/95 backdrop-blur border border-slate-200 px-4 py-3 rounded-2xl shadow-xl text-center min-w-[210px]">
+            <div id="tip-badge" class="text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full inline-block mb-1">CATEGORY</div>
+            <div id="tip-title" class="text-xs font-bold text-slate-800">Hover slice</div>
+            <div id="tip-count" class="text-xl font-bold font-mono my-0.5 text-teal-700">0 Doses</div>
+            <div id="tip-percent" class="text-xs text-slate-500 font-mono">0.0% of total</div>
+            <div id="tip-desc" class="text-[11px] text-slate-500 mt-1 border-t border-slate-100 pt-1 font-sans">Details</div>
+          </div>
+
+          <!-- 3D Perspective Wrapper -->
+          <div id="stage-3d" class="relative w-80 h-80 cursor-pointer flex items-center justify-center" style="perspective: 900px;">
+            <svg id="svg-3d-donut" viewBox="0 0 400 400" class="w-full h-full transition-transform duration-300" style="transform: rotateX(50deg) rotateZ(-25deg); transform-style: preserve-3d; filter: drop-shadow(0 20px 20px rgba(148, 163, 184, 0.45));">
+              <!-- Defs for 3D gradients and filters -->
+              <defs>
+                <!-- Taken Green 3D Gradients -->
+                <linearGradient id="grad-taken-top" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#34d399"/>
+                  <stop offset="100%" stop-color="#059669"/>
+                </linearGradient>
+                <linearGradient id="grad-taken-side" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#047857"/>
+                  <stop offset="100%" stop-color="#065f46"/>
+                </linearGradient>
+
+                <!-- Missed Red 3D Gradients -->
+                <linearGradient id="grad-missed-top" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#f87171"/>
+                  <stop offset="100%" stop-color="#dc2626"/>
+                </linearGradient>
+                <linearGradient id="grad-missed-side" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#b91c1c"/>
+                  <stop offset="100%" stop-color="#991b1b"/>
+                </linearGradient>
+
+                <!-- Manually Changed Sky 3D Gradients -->
+                <linearGradient id="grad-manual-top" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#38bdf8"/>
+                  <stop offset="100%" stop-color="#0284c7"/>
+                </linearGradient>
+                <linearGradient id="grad-manual-side" x1="0%" y1="0%" x2="0%" y2="100%">
+                  <stop offset="0%" stop-color="#0369a1"/>
+                  <stop offset="100%" stop-color="#075985"/>
+                </linearGradient>
+              </defs>
+
+              <!-- Base shadow layer -->
+              <ellipse cx="200" cy="225" rx="140" ry="140" fill="#cbd5e1" opacity="0.6"/>
+
+              <!-- Dynamic 3D Slices injected by JS -->
+              <g id="donut-3d-layers"></g>
+            </svg>
+
+            <!-- Center 3D Hub (Floating inside the donut hole) -->
+            <div id="donut-center-hub" class="absolute pointer-events-none flex flex-col items-center justify-center text-center p-3 rounded-full bg-white/95 border border-slate-200/80 shadow-xl backdrop-blur" style="width: 110px; height: 110px; transform: translateZ(35px);">
+              <span class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">ADHERENCE</span>
+              <span id="center-adherence-pct" class="text-2xl font-black text-teal-700 font-mono leading-none my-1">100%</span>
+              <span id="center-adherence-label" class="text-[10px] text-emerald-600 font-bold truncate max-w-[95px]">Optimal</span>
+            </div>
+          </div>
+
+          <div class="mt-3 text-center text-xs text-slate-500 flex items-center space-x-2">
+            <i class="fa-solid fa-cube text-teal-600 text-[11px]"></i>
+            <span>Interactive 3D geometry • Hover over slices to inspect breakdown</span>
+          </div>
+        </div>
+
+        <!-- Right 5 Cols: Interactive Category Cards & Breakdown -->
+        <div class="lg:col-span-5 space-y-3">
+          <div class="flex items-center justify-between mb-1">
+            <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Adherence Category Breakdown</span>
+            <span class="text-[11px] text-slate-400">Hover card to raise 3D slice</span>
+          </div>
+
+          <!-- Card 1: Taken On Time -->
+          <div id="legend-card-taken" class="p-3.5 bg-emerald-50/50 border border-emerald-200/70 hover:border-emerald-400 rounded-2xl transition-all cursor-pointer group shadow-2xs">
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="flex items-center space-x-2.5">
+                <span class="w-3.5 h-3.5 rounded-full bg-emerald-500 shadow-sm inline-block border-2 border-emerald-300"></span>
+                <span class="text-xs font-bold text-emerald-900 group-hover:text-emerald-700">Medicine Taken On Time</span>
+              </div>
+              <span id="pct-taken" class="text-xs font-mono font-bold text-emerald-700">100%</span>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+              <span>Confirmed via box button (&lt; 10s)</span>
+              <span id="count-taken" class="font-bold text-slate-800 font-mono text-xs">0 Doses</span>
+            </div>
+            <div class="w-full bg-emerald-100 rounded-full h-1.5 mt-2 overflow-hidden">
+              <div id="bar-taken" class="bg-emerald-500 h-full rounded-full transition-all duration-500" style="width: 100%;"></div>
+            </div>
+          </div>
+
+          <!-- Card 2: Medicine Missed -->
+          <div id="legend-card-missed" class="p-3.5 bg-rose-50/50 border border-rose-200/70 hover:border-rose-400 rounded-2xl transition-all cursor-pointer group shadow-2xs">
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="flex items-center space-x-2.5">
+                <span class="w-3.5 h-3.5 rounded-full bg-rose-500 shadow-sm inline-block border-2 border-rose-300"></span>
+                <span class="text-xs font-bold text-rose-900 group-hover:text-rose-700">Medicine Missed</span>
+              </div>
+              <span id="pct-missed" class="text-xs font-mono font-bold text-rose-700">0%</span>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+              <span>10s timeout reached (No button press)</span>
+              <span id="count-missed" class="font-bold text-slate-800 font-mono text-xs">0 Doses</span>
+            </div>
+            <div class="w-full bg-rose-100 rounded-full h-1.5 mt-2 overflow-hidden">
+              <div id="bar-missed" class="bg-rose-500 h-full rounded-full transition-all duration-500" style="width: 0%;"></div>
+            </div>
+          </div>
+
+          <!-- Card 3: Manually Changed -->
+          <div id="legend-card-manual" class="p-3.5 bg-sky-50/50 border border-sky-200/70 hover:border-sky-400 rounded-2xl transition-all cursor-pointer group shadow-2xs">
+            <div class="flex items-center justify-between mb-1.5">
+              <div class="flex items-center space-x-2.5">
+                <span class="w-3.5 h-3.5 rounded-full bg-sky-500 shadow-sm inline-block border-2 border-sky-300"></span>
+                <span class="text-xs font-bold text-sky-900 group-hover:text-sky-700">Manually Changed / Overridden</span>
+              </div>
+              <span id="pct-manual" class="text-xs font-mono font-bold text-sky-700">0%</span>
+            </div>
+            <div class="flex items-center justify-between text-[11px] text-slate-500 font-medium">
+              <span>Adjusted manually by user on dashboard</span>
+              <span id="count-manual" class="font-bold text-slate-800 font-mono text-xs">0 Edits</span>
+            </div>
+            <div class="w-full bg-sky-100 rounded-full h-1.5 mt-2 overflow-hidden">
+              <div id="bar-manual" class="bg-sky-500 h-full rounded-full transition-all duration-500" style="width: 0%;"></div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- BUZZER DOSE RECORDS LOG (Stores ALL outputs done by buzzer) -->
+    <section class="card-glow rounded-2xl overflow-hidden">
+      <div class="p-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center space-x-2.5">
+          <div class="w-7 h-7 rounded-lg bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-600 text-xs">
+            <i class="fa-solid fa-volume-high"></i>
+          </div>
+          <h2 class="font-bold text-sm tracking-wide text-slate-900 uppercase">Buzzer Dose Records Log</h2>
+          <span id="dose-record-count-badge" class="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-teal-50 border border-teal-200 text-teal-800 font-bold">0 Records Stored</span>
+        </div>
+        <button id="btn-reset-stats" class="text-xs text-slate-500 hover:text-rose-600 px-3.5 py-1.5 bg-slate-50 hover:bg-rose-50 rounded-xl border border-slate-200/80 hover:border-rose-200 transition font-medium">
+          <i class="fa-solid fa-trash-can mr-1"></i> Clear Records
+        </button>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200 uppercase text-[10px] tracking-wider">
+            <tr>
+              <th class="px-5 py-3">Timestamp</th>
+              <th class="px-5 py-3">Dose Schedule</th>
+              <th class="px-5 py-3">Result / Status</th>
+              <th class="px-5 py-3">Buzzer Response Time</th>
+              <th class="px-5 py-3">Buzzer Action & Manual Edit</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body" class="divide-y divide-slate-100 font-mono">
+            <tr>
+              <td colspan="5" class="px-5 py-8 text-center text-slate-400 font-sans text-xs">
+                No buzzer dose records stored yet. Trigger a dose or wait for scheduled time.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ================================================================= -->
+  <!-- SLIDE-OVER SCHEDULE DRAWER (Opens smoothly to edit dose times) -->
+  <!-- ================================================================= -->
+  <!-- Drawer Backdrop Overlay -->
+  <div id="schedule-drawer-backdrop" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 transition-opacity duration-300 opacity-0 hidden"></div>
+
+  <!-- Drawer Slide-In Panel -->
+  <div id="schedule-drawer" class="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-slate-200 transform translate-x-full transition-transform duration-300 ease-in-out flex flex-col justify-between">
+    
+    <!-- Drawer Header -->
+    <div class="p-6 border-b border-slate-100 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-2xl bg-teal-50 border border-teal-200 text-teal-600 flex items-center justify-center text-base shadow-2xs">
+          <i class="fa-solid fa-clock"></i>
+        </div>
+        <div>
+          <h3 class="font-bold text-base text-slate-900">Set Medicine Schedule</h3>
+          <p class="text-xs text-slate-500 font-medium">Configure 12-Hour AM/PM reminder times</p>
+        </div>
+      </div>
+      
+      <!-- Close Button (✕) -->
+      <button id="btn-close-schedule-drawer" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition">
+        <i class="fa-solid fa-xmark text-sm"></i>
+      </button>
+    </div>
+
+    <!-- Drawer Body: Time Inputs -->
+    <div class="p-6 space-y-4 overflow-y-auto custom-scroll flex-1">
+      <div class="flex items-center justify-between pb-1">
+        <span class="text-xs font-bold text-slate-700 uppercase tracking-wider">Scheduled Dose Timers</span>
+        <span class="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 font-mono font-bold px-2.5 py-0.5 rounded-full" id="schedule-save-status">Armed</span>
+      </div>
+
+      <!-- Dose 1: Morning -->
+      <div class="bg-emerald-50/40 border border-emerald-200/80 rounded-2xl p-4 space-y-2.5 shadow-2xs">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm border-2 border-emerald-300"></span>
+            <span class="text-xs font-bold text-emerald-900">Dose 1: Morning (Light 1)</span>
+          </div>
+          <span class="text-[10px] font-mono text-emerald-700 bg-white px-2 py-0.5 rounded-full border border-emerald-200 font-semibold">GPIO 19</span>
+        </div>
+        <p class="text-[11px] text-slate-500">Green LED blinks & buzzer beeps at this morning time.</p>
+        <div class="flex items-center space-x-2 pt-1">
+          <div class="flex-1 flex items-center space-x-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
+            <input type="number" id="h-dose-1" min="1" max="12" value="8" title="Hour (1-12)" class="w-12 bg-transparent text-center text-slate-900 font-extrabold font-mono text-sm focus:outline-none">
+            <span class="text-slate-400 font-bold">:</span>
+            <input type="number" id="m-dose-1" min="0" max="59" value="0" title="Minute (0-59)" class="w-12 bg-transparent text-center text-slate-900 font-extrabold font-mono text-sm focus:outline-none">
+          </div>
+          <select id="ampm-dose-1" class="bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-emerald-700 font-extrabold focus:outline-none shadow-2xs">
+            <option value="AM" selected>AM</option>
+            <option value="PM">PM</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Dose 2: Afternoon -->
+      <div class="bg-amber-50/40 border border-amber-200/80 rounded-2xl p-4 space-y-2.5 shadow-2xs">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-amber-500 shadow-sm border-2 border-amber-300"></span>
+            <span class="text-xs font-bold text-amber-900">Dose 2: Afternoon (Light 2)</span>
+          </div>
+          <span class="text-[10px] font-mono text-amber-700 bg-white px-2 py-0.5 rounded-full border border-amber-200 font-semibold">GPIO 18</span>
+        </div>
+        <p class="text-[11px] text-slate-500">Yellow LED blinks & buzzer beeps at this afternoon time.</p>
+        <div class="flex items-center space-x-2 pt-1">
+          <div class="flex-1 flex items-center space-x-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
+            <input type="number" id="h-dose-2" min="1" max="12" value="1" title="Hour (1-12)" class="w-12 bg-transparent text-center text-slate-900 font-extrabold font-mono text-sm focus:outline-none">
+            <span class="text-slate-400 font-bold">:</span>
+            <input type="number" id="m-dose-2" min="0" max="59" value="30" title="Minute (0-59)" class="w-12 bg-transparent text-center text-slate-900 font-extrabold font-mono text-sm focus:outline-none">
+          </div>
+          <select id="ampm-dose-2" class="bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-amber-700 font-extrabold focus:outline-none shadow-2xs">
+            <option value="AM">AM</option>
+            <option value="PM" selected>PM</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Dose 3: Night -->
+      <div class="bg-rose-50/40 border border-rose-200/80 rounded-2xl p-4 space-y-2.5 shadow-2xs">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-2">
+            <span class="w-3 h-3 rounded-full bg-rose-500 shadow-sm border-2 border-rose-300"></span>
+            <span class="text-xs font-bold text-rose-900">Dose 3: Night (Light 3)</span>
+          </div>
+          <span class="text-[10px] font-mono text-rose-700 bg-white px-2 py-0.5 rounded-full border border-rose-200 font-semibold">GPIO 5</span>
+        </div>
+        <p class="text-[11px] text-slate-500">Red LED blinks & buzzer beeps at this night time.</p>
+        <div class="flex items-center space-x-2 pt-1">
+          <div class="flex-1 flex items-center space-x-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-2xs">
+            <input type="number" id="h-dose-3" min="1" max="12" value="8" title="Hour (1-12)" class="w-12 bg-transparent text-center text-slate-900 font-extrabold font-mono text-sm focus:outline-none">
+            <span class="text-slate-400 font-bold">:</span>
+            <input type="number" id="m-dose-3" min="0" max="59" value="0" title="Minute (0-59)" class="w-12 bg-transparent text-center text-slate-900 font-extrabold font-mono text-sm focus:outline-none">
+          </div>
+          <select id="ampm-dose-3" class="bg-white border border-slate-200 rounded-xl px-3.5 py-2 text-xs text-rose-700 font-extrabold focus:outline-none shadow-2xs">
+            <option value="AM">AM</option>
+            <option value="PM" selected>PM</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Drawer Footer Actions -->
+    <div class="p-6 border-t border-slate-100 bg-slate-50/70 space-y-2.5">
+      <button id="btn-save-schedule" class="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-2 shadow-sm">
+        <i class="fa-solid fa-floppy-disk text-xs"></i>
+        <span>Save & Arm Schedule</span>
+      </button>
+      <button id="btn-cancel-schedule-drawer" class="w-full py-2 bg-white hover:bg-slate-100 text-slate-600 rounded-xl text-xs font-semibold border border-slate-200 transition">
+        Cancel
+      </button>
+    </div>
+
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

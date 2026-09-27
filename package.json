@@ -1,0 +1,13 @@
+{
+  "name": "smart-medical-box-dashboard",
+  "version": "1.0.0",
+  "description": "Real-time backend and frontend interface for ESP32 Smart Medical Box with live alerts",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
